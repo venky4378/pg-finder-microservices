@@ -1,0 +1,12 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Maven
+target/
+
+# Application configuration
+**/src/main/resources/application.properties
+
+# Logs
+*.log
