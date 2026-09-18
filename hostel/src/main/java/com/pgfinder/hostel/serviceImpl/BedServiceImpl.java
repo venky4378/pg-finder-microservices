@@ -76,4 +76,11 @@ public class BedServiceImpl implements BedService {
         Bed bed = bedRepo.findById(id).orElseThrow(() -> new BedNotFoundException("Bed not found with id: " + id));
         bedRepo.delete(bed);
     }
+
+    @Override
+    public BedDto getBedByHostelId(Long hostelId, Long bedId) {
+        Bed bed = bedRepo.findByIdAndRoomHostelId(bedId,hostelId).orElseThrow(()->
+                new BedNotFoundException("Bed "+bedId + "not found in hostel "+hostelId));
+        return bedMapper.toDto(bed);
+    }
 }

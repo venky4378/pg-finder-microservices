@@ -34,9 +34,20 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(BedAlreadyExistsException.class)
     public ResponseEntity<ErrorResponse> handleBedAlreadyExists(BedAlreadyExistsException ex) {
-        ErrorResponse errorResponse = new ErrorResponse(409, ex.getMessage(), LocalDateTime.now().toString()
-        );
+        ErrorResponse errorResponse = new ErrorResponse(409, ex.getMessage(), LocalDateTime.now().toString());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+    }
+
+    @ExceptionHandler(AmenityAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleAmenityAlreadyExists(AmenityAlreadyExistsException ex) {
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                ex.getMessage(),
+                LocalDateTime.now().toString()
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }
 
 

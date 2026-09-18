@@ -7,12 +7,13 @@ import java.util.List;
 
 public interface BookingService {
 
-     public BookingResponseDto createBooking(BookingRequestDto bookingRequestDto);
+     BookingResponseDto createBooking(BookingRequestDto bookingRequestDto);
 
-     public List<BookingResponseDto> getAllBookings();
-     public BookingResponseDto getBookingById(Long id);
-     public BookingResponseDto updateBooking(BookingRequestDto bookingRequestDto,Long id);
-     public void deleteBooking(Long id);
+     List<BookingResponseDto> getAllBookings();
 
+     BookingResponseDto getBookingById(Long id);
 
+     BookingResponseDto updateBooking(Long id, BookingRequestDto bookingRequestDto);
+
+     void deleteBooking(Long id);
 }

@@ -2,6 +2,7 @@ package com.pgfinder.hostel.serviceImpl;
 
 import com.pgfinder.hostel.dto.AmenityDto;
 import com.pgfinder.hostel.entity.Amenity;
+import com.pgfinder.hostel.exception.AmenityAlreadyExistsException;
 import com.pgfinder.hostel.exception.AmenityNotFoundException;
 import com.pgfinder.hostel.mapper.AmenityMapper;
 import com.pgfinder.hostel.repository.AmenityRepository;
@@ -27,6 +28,10 @@ public class AmenityServiceImpl implements AmenityService {
     @Override
     public AmenityDto createAmenity(AmenityDto amenityDto) {
 
+        if(amenityRepository.existsByName(amenityDto.getName())){
+            throw new AmenityAlreadyExistsException("Amenity already exists: "+amenityDto.getName());
+        }
+
         Amenity amenity = amenityMapper.toEntity(amenityDto);
 
         Amenity savedAmenity = amenityRepository.save(amenity);
@@ -44,32 +49,26 @@ public class AmenityServiceImpl implements AmenityService {
     }
 
     @Override
-    public AmenityDto getAmenityById(Long id) {
+    public AmenityDto updateAmenity(Long id, AmenityDto amenityDto) {
+        Amenity existingAmenity = amenityRepository.findById(id)
+                .orElseThrow(() -> new AmenityNotFoundException(
+                                "Amenity not found with id: " + id));
+        if (amenityRepository.existsByName(amenityDto.getName())
+                && !existingAmenity.getName().equals(amenityDto.getName())) {
+            throw new AmenityAlreadyExistsException("Amenity already exists: " + amenityDto.getName());
+        }
+        existingAmenity.setName(amenityDto.getName());
+        Amenity updatedAmenity = amenityRepository.save(existingAmenity);
+        return amenityMapper.toDto(updatedAmenity);
+    }
 
+    @Override
+    public AmenityDto getAmenityById(Long id) {
         Amenity amenity = amenityRepository.findById(id)
                 .orElseThrow(() ->
                         new AmenityNotFoundException(
                                 "Amenity not found with id: " + id));
-
         return amenityMapper.toDto(amenity);
-    }
-
-    @Override
-    public AmenityDto updateAmenity(
-            Long id,
-            AmenityDto amenityDto) {
-
-        Amenity existingAmenity = amenityRepository.findById(id)
-                .orElseThrow(() ->
-                        new AmenityNotFoundException(
-                                "Amenity not found with id: " + id));
-
-        existingAmenity.setName(amenityDto.getName());
-
-        Amenity updatedAmenity =
-                amenityRepository.save(existingAmenity);
-
-        return amenityMapper.toDto(updatedAmenity);
     }
 
     @Override

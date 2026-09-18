@@ -4,6 +4,7 @@ import com.pgfinder.hostel.dto.HostelRequestDto;
 import com.pgfinder.hostel.dto.HostelResponseDto;
 import com.pgfinder.hostel.entity.Amenity;
 import com.pgfinder.hostel.entity.Hostel;
+import com.pgfinder.hostel.exception.HostelNotFoundException;
 import com.pgfinder.hostel.mapper.HostelMapper;
 import com.pgfinder.hostel.repository.AmenityRepository;
 import com.pgfinder.hostel.repository.HostelRepository;
@@ -59,7 +60,7 @@ public class HostelServiceImpl implements HostelService {
     public HostelResponseDto getHostelById(Long id) {
 
         Hostel hostel = hostelRepository.findById(id).orElseThrow(() ->
-                        new RuntimeException("Hostel not found with id: " + id));
+                        new HostelNotFoundException("Hostel not found with id: " + id));
 
         return hostelMapper.toResponse(hostel);
     }
@@ -68,7 +69,7 @@ public class HostelServiceImpl implements HostelService {
     public HostelResponseDto updateHostel(Long id, HostelRequestDto hostelRequestDto) {
 
         Hostel existingHostel = hostelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Hostel not found with id: " + id));
+                .orElseThrow(() -> new HostelNotFoundException("Hostel not found with id: " + id));
         existingHostel.setName(hostelRequestDto.getName());
         existingHostel.setDescription(hostelRequestDto.getDescription());
         existingHostel.setGenderType(hostelRequestDto.getGenderType());
@@ -91,7 +92,7 @@ public class HostelServiceImpl implements HostelService {
     public void deleteHostel(Long id) {
 
         Hostel hostel = hostelRepository.findById(id).orElseThrow(() ->
-                new RuntimeException("Hostel not found with id: " + id));
+                new HostelNotFoundException("Hostel not found with id: " + id));
 
         hostelRepository.delete(hostel);
     }

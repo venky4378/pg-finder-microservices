@@ -15,4 +15,6 @@ public interface BedService {
     BedDto updateBed(Long id, BedDto bedDto);
 
     void deleteBed(Long id);
+
+    BedDto getBedByHostelId(Long hostelId,Long bedId);
 }

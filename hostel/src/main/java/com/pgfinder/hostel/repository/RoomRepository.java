@@ -7,4 +7,5 @@ public interface RoomRepository extends JpaRepository<Room,Long> {
     boolean existsByRoomNumberAndHostelId(
             String roomNumber,
             Long hostelId
-    );}
+    );
+}

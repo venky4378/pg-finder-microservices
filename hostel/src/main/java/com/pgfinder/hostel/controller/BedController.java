@@ -3,6 +3,7 @@ package com.pgfinder.hostel.controller;
 import com.pgfinder.hostel.dto.BedDto;
 import com.pgfinder.hostel.service.BedService;
 import jakarta.validation.Valid;
+import org.apache.coyote.Response;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -37,6 +38,11 @@ public class BedController {
     public ResponseEntity<BedDto> getBedById(@PathVariable Long id) {
         BedDto response = bedService.getBedById(id);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/hostel/{hostelId}/bed/{bedId}")
+    public ResponseEntity<BedDto> getBedByHostelId(@PathVariable Long hostelId, @PathVariable Long bedId){
+        return ResponseEntity.ok(bedService.getBedByHostelId(hostelId,bedId));
     }
 
     @PutMapping("/{id}")
