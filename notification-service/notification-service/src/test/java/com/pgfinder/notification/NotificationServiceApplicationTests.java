@@ -1,15 +1,13 @@
-package com.pgfinder.api_gateway;
+package com.pgfinder.notification;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class ApiGatewayApplicationTests {
+class NotificationServiceApplicationTests {
 
 	@Test
 	void contextLoads() {
 	}
 
 }
-
-

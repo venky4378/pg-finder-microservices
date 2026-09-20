@@ -1,5 +1,6 @@
 package com.pgfinder.user.dto;
 
+import com.pgfinder.user.entity.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -24,5 +25,7 @@ public class UserRequestDto {
     @Size(min = 10, max = 10,
             message = "Phone number must be 10 digits")
     private String phone;
+
+    private Role role;
 
 }

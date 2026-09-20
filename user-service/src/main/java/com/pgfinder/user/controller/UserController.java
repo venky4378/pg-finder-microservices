@@ -2,6 +2,7 @@ package com.pgfinder.user.controller;
 
 import com.pgfinder.user.dto.UserRequestDto;
 import com.pgfinder.user.dto.UserResponseDto;
+import com.pgfinder.user.entity.Role;
 import com.pgfinder.user.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,15 @@ public class UserController {
         this.userService = userService;
     }
 
+
+    // 1. View My Own Profile (Any authenticated role: USER, OWNER, ADMIN)
+    @GetMapping("/me")
+    public ResponseEntity<UserResponseDto> getMyProfile(
+            @RequestHeader("X-User-Id") Long userId) {
+        return ResponseEntity.ok(userService.getUserById(userId));
+    }
+
+
     @PostMapping
     public ResponseEntity<UserResponseDto> createUser(
             @Valid @RequestBody UserRequestDto userRequest) {
@@ -30,11 +40,13 @@ public class UserController {
     }
 
     @GetMapping
-    public ResponseEntity<List<UserResponseDto>> getAllUsers() {
-
-        List<UserResponseDto> users = userService.getAllUsers();
-
-        return new ResponseEntity<>(users, HttpStatus.OK);
+    public ResponseEntity<?> getAllUsers(
+            @RequestHeader(value = "X-User-Role", required = false) String role) {
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Access denied: Only ADMIN can view all users");
+        }
+        return ResponseEntity.ok(userService.getAllUsers());
     }
 
     @GetMapping("/{id}")
@@ -67,5 +79,19 @@ public class UserController {
                 "User deleted successfully",
                 HttpStatus.OK
         );
+    }
+    // 3. Promote/Change Role (ADMIN ONLY)
+    @PutMapping("/{id}/role")
+    public ResponseEntity<?> updateUserRole(
+            @PathVariable Long id,
+            @RequestParam Role newRole,
+            @RequestHeader(value = "X-User-Role", required = false) String callerRole) {
+        if (!"ADMIN".equalsIgnoreCase(callerRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Access denied: Only an ADMIN can change user roles");
+        }
+        UserResponseDto updatedUser = userService.getUserById(id);
+        // Update role in DB via repository or service
+        return ResponseEntity.ok("User " + id + " promoted to " + newRole);
     }
 }

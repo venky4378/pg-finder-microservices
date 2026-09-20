@@ -11,9 +11,12 @@ import com.pgfinder.booking_service.exception.BookingNotFoundException;
 import com.pgfinder.booking_service.exception.InvalidBookingException;
 import com.pgfinder.booking_service.mapper.BookingMapper;
 import com.pgfinder.booking_service.repository.BookingRepository;
+import com.pgfinder.booking_service.service.BookingEvent;
 import com.pgfinder.booking_service.service.BookingService;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -23,13 +26,15 @@ public class BookingServiceImpl implements BookingService {
     private final BookingMapper bookingMapper;
     private final UserClient userClient;
     private final HostelClient hostelClient;
+    private final KafkaTemplate<String,Object> kafkaTemplate;
 
     public BookingServiceImpl(BookingRepository bookingRepository,
-                              BookingMapper bookingMapper, UserClient userClient, HostelClient hostelClient) {
+                              BookingMapper bookingMapper, UserClient userClient, HostelClient hostelClient,KafkaTemplate kafkaTemplate) {
         this.bookingRepository = bookingRepository;
         this.bookingMapper = bookingMapper;
         this.userClient = userClient;
         this.hostelClient = hostelClient;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     @Override
@@ -70,7 +75,9 @@ public class BookingServiceImpl implements BookingService {
         booking.setStatus(BookingStatus.PENDING);
         // 8. Save booking
         Booking savedBooking = bookingRepository.save(booking);
+        sendBookingEvent(savedBooking, "PENDING"); // <-- Publish Kafka Event
         // 9. Return response
+
         return bookingMapper.toResponse(savedBooking);
     }
 
@@ -145,7 +152,7 @@ public class BookingServiceImpl implements BookingService {
 
         // 2. Automatically mark Bed as OCCUPIED in hostel-service via OpenFeign!
         hostelClient.updateBedStatus(savedBooking.getBedId(), "OCCUPIED");
-
+        sendBookingEvent(savedBooking, "CONFIRMED"); // <-- Add this line
         return bookingMapper.toResponse(savedBooking);
     }
 
@@ -167,7 +174,7 @@ public class BookingServiceImpl implements BookingService {
 
         // 2. Automatically release Bed back to AVAILABLE in hostel-service via OpenFeign!
         hostelClient.updateBedStatus(savedBooking.getBedId(), "AVAILABLE");
-
+        sendBookingEvent(savedBooking, "CANCELLED"); // <-- Add this line
         return bookingMapper.toResponse(savedBooking);
     }
 
@@ -186,7 +193,21 @@ public class BookingServiceImpl implements BookingService {
 
         // 2. Automatically release Bed back to AVAILABLE in hostel-service via OpenFeign!
         hostelClient.updateBedStatus(savedBooking.getBedId(), "AVAILABLE");
-
         return bookingMapper.toResponse(savedBooking);
+    }
+    private void sendBookingEvent(Booking booking, String status) {
+        BookingEvent event = BookingEvent.builder()
+                .bookingId(booking.getId())
+                .userId(booking.getUserId())
+                .hostelId(booking.getHostelId())
+                .bedId(booking.getBedId())
+                .status(status)
+                .checkInDate(booking.getCheckInDate())
+                .checkOutDate(booking.getCheckOutDate())
+                .eventTimeStamp(LocalDateTime.now())
+                .build();
+
+        kafkaTemplate.send("booking-events", String.valueOf(booking.getId()), event);
+        System.out.println("📢 [KAFKA EVENT PUBLISHED] Booking #" + booking.getId() + " - Status: " + status);
     }
 }
