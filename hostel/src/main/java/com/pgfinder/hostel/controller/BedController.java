@@ -1,6 +1,7 @@
 package com.pgfinder.hostel.controller;
 
 import com.pgfinder.hostel.dto.BedDto;
+import com.pgfinder.hostel.entity.BedStatus;
 import com.pgfinder.hostel.service.BedService;
 import jakarta.validation.Valid;
 import org.apache.coyote.Response;
@@ -55,5 +56,10 @@ public class BedController {
     public ResponseEntity<String> deleteBed(@PathVariable Long id) {
         bedService.deleteBed(id);
         return ResponseEntity.ok("Bed deleted successfully");
+    }
+    @PutMapping("/{id}/status")
+    public ResponseEntity<BedDto> updateBedStatus(@PathVariable Long id, @RequestParam BedStatus status) {
+        BedDto response = bedService.updateBedStatus(id, status);
+        return ResponseEntity.ok(response);
     }
 }

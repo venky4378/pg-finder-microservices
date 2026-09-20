@@ -1,6 +1,7 @@
 package com.pgfinder.hostel.service;
 
 import com.pgfinder.hostel.dto.BedDto;
+import com.pgfinder.hostel.entity.BedStatus;
 
 import java.util.List;
 
@@ -17,4 +18,7 @@ public interface BedService {
     void deleteBed(Long id);
 
     BedDto getBedByHostelId(Long hostelId,Long bedId);
+
+    BedDto updateBedStatus(Long id, BedStatus status);
+
 }

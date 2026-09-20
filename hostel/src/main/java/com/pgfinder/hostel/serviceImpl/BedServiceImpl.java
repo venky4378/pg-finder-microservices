@@ -2,6 +2,7 @@ package com.pgfinder.hostel.serviceImpl;
 
 import com.pgfinder.hostel.dto.BedDto;
 import com.pgfinder.hostel.entity.Bed;
+import com.pgfinder.hostel.entity.BedStatus;
 import com.pgfinder.hostel.entity.Room;
 import com.pgfinder.hostel.exception.BedAlreadyExistsException;
 import com.pgfinder.hostel.exception.BedNotFoundException;
@@ -82,5 +83,14 @@ public class BedServiceImpl implements BedService {
         Bed bed = bedRepo.findByIdAndRoomHostelId(bedId,hostelId).orElseThrow(()->
                 new BedNotFoundException("Bed "+bedId + "not found in hostel "+hostelId));
         return bedMapper.toDto(bed);
+    }
+
+    @Override
+    public BedDto updateBedStatus(Long id, BedStatus status) {
+        Bed existedBed = bedRepo.findById(id)
+                .orElseThrow(() ->new BedNotFoundException("Bed not Found "+id));
+        existedBed.setStatus(status);
+        Bed updatedBed = bedRepo.save(existedBed);
+        return bedMapper.toDto(updatedBed);
     }
 }

@@ -123,4 +123,70 @@ public class BookingServiceImpl implements BookingService {
             throw new InvalidBookingException("Check-out date must be after check-in date");
         }
     }
+
+    @Override
+    public BookingResponseDto confirmBooking(Long id) {
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + id));
+
+        if (booking.getStatus() == BookingStatus.CONFIRMED) {
+            throw new InvalidBookingException("Booking is already confirmed");
+        }
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new InvalidBookingException("Cannot confirm a cancelled booking");
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED) {
+            throw new InvalidBookingException("Cannot confirm a completed booking");
+        }
+
+        // 1. Update booking status
+        booking.setStatus(BookingStatus.CONFIRMED);
+        Booking savedBooking = bookingRepository.save(booking);
+
+        // 2. Automatically mark Bed as OCCUPIED in hostel-service via OpenFeign!
+        hostelClient.updateBedStatus(savedBooking.getBedId(), "OCCUPIED");
+
+        return bookingMapper.toResponse(savedBooking);
+    }
+
+    @Override
+    public BookingResponseDto cancelBooking(Long id) {
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + id));
+
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            throw new InvalidBookingException("Booking is already cancelled");
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED) {
+            throw new InvalidBookingException("Cannot cancel an already completed booking");
+        }
+
+        // 1. Update booking status
+        booking.setStatus(BookingStatus.CANCELLED);
+        Booking savedBooking = bookingRepository.save(booking);
+
+        // 2. Automatically release Bed back to AVAILABLE in hostel-service via OpenFeign!
+        hostelClient.updateBedStatus(savedBooking.getBedId(), "AVAILABLE");
+
+        return bookingMapper.toResponse(savedBooking);
+    }
+
+    @Override
+    public BookingResponseDto completeBooking(Long id) {
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + id));
+
+        if (booking.getStatus() != BookingStatus.CONFIRMED) {
+            throw new InvalidBookingException("Only CONFIRMED bookings can be completed. Current status: " + booking.getStatus());
+        }
+
+        // 1. Update booking status
+        booking.setStatus(BookingStatus.COMPLETED);
+        Booking savedBooking = bookingRepository.save(booking);
+
+        // 2. Automatically release Bed back to AVAILABLE in hostel-service via OpenFeign!
+        hostelClient.updateBedStatus(savedBooking.getBedId(), "AVAILABLE");
+
+        return bookingMapper.toResponse(savedBooking);
+    }
 }

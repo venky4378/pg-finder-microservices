@@ -53,4 +53,22 @@ public class BookingController {
         return new ResponseEntity<>("Booking deleted successfully", HttpStatus.OK
         );
     }
+
+    @PatchMapping("/{id}/confirm")
+    public ResponseEntity<BookingResponseDto> confirmBooking(@PathVariable Long id) {
+        BookingResponseDto response = bookingService.confirmBooking(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<BookingResponseDto> cancelBooking(@PathVariable Long id) {
+        BookingResponseDto response = bookingService.cancelBooking(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/complete")
+    public ResponseEntity<BookingResponseDto> completeBooking(@PathVariable Long id) {
+        BookingResponseDto response = bookingService.completeBooking(id);
+        return ResponseEntity.ok(response);
+    }
 }
