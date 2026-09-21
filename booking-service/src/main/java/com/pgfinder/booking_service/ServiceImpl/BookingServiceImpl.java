@@ -56,11 +56,12 @@ public class BookingServiceImpl implements BookingService {
         if (!"AVAILABLE".equals(bed.getStatus())) {
             throw new InvalidBookingException("Bed is not available: " + bookingRequestDto.getBedId());
         }
-        // 6. Check whether bed is already booked for these dates
+        // 6. Check whether bed is already booked for these dates (excluding CANCELLED bookings)
         boolean alreadyBooked =
                 bookingRepository
-                        .existsByBedIdAndCheckInDateLessThanAndCheckOutDateGreaterThan(
+                        .existsByBedIdAndStatusNotAndCheckInDateLessThanAndCheckOutDateGreaterThan(
                                 bookingRequestDto.getBedId(),
+                                BookingStatus.CANCELLED,
                                 bookingRequestDto.getCheckOutDate(),
                                 bookingRequestDto.getCheckInDate()
                         );
