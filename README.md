@@ -1,559 +1,920 @@
-# 🏨 PG Finder — Microservices-Based PG & Hostel Reservation System
+# 🏨 PG Finder — Microservices Accommodation & Reservation Platform
 
-<div align="center">
+> **An event-driven, full-stack microservices platform for PG/hostel discovery, bed-level inventory management, and reservation workflows.**
 
-### A scalable, event-driven backend for PG/hostel discovery, bed inventory, authentication, and reservations.
+PG Finder is a full-stack distributed application designed for managing Paying Guest (PG) and hostel accommodations.
 
-![Java](https://img.shields.io/badge/Java-17%20%7C%2021-ED8B00?style=for-the-badge\&logo=openjdk\&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3+-6DB33F?style=for-the-badge\&logo=springboot\&logoColor=white)
-![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2023.x-6DB33F?style=for-the-badge\&logo=spring\&logoColor=white)
-![Apache Kafka](https://img.shields.io/badge/Apache%20Kafka-4.x-231F20?style=for-the-badge\&logo=apachekafka\&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=for-the-badge\&logo=mysql\&logoColor=white)
-![JWT](https://img.shields.io/badge/JWT-JJWT-000000?style=for-the-badge\&logo=jsonwebtokens\&logoColor=white)
+Unlike a traditional hotel booking system that primarily manages rooms, PG Finder manages **individual beds**, room-sharing configurations, gender policies, hostel ownership, availability, and date-based booking conflicts.
 
-</div>
+The platform is built using **Spring Boot Microservices, Spring Cloud, React, MySQL, OpenFeign, JWT, Eureka, and Apache Kafka**.
 
 ---
 
-## 📌 Overview
+## 📌 Key Features
 
-**PG Finder** is a microservices-based application designed to manage **Paying Guest (PG) and hostel properties, rooms, beds, users, and reservations**.
+### 👤 User & Authentication
 
-The system is built using **Spring Boot and Spring Cloud** and follows a distributed architecture where each major business domain is implemented as an independent microservice.
+* User registration and login
+* JWT-based authentication
+* BCrypt password hashing
+* Role-Based Access Control (RBAC)
+* Three user roles:
 
-The project demonstrates practical implementation of:
+  * `RESIDENT`
+  * `OWNER`
+  * `ADMIN`
+* User profile management
+* Protected API endpoints
 
-* Microservices Architecture
-* REST APIs
-* API Gateway
-* Service Discovery
-* JWT Authentication
-* Role-Based Access Control
-* OpenFeign communication
-* Apache Kafka event streaming
-* Database-per-Service architecture
-* Spring Data JPA
-* MySQL
+### 🏢 Hostel Management
+
+* Create and manage PG/hostel properties
+* Manage rooms and beds
+* Room-sharing configurations:
+
+  * Single
+  * Double
+  * Triple
+  * Four-plus sharing
+* Gender policies:
+
+  * Male
+  * Female
+  * Co-ed
+* Hostel amenities
+* Owner-based hostel management
+* Cascading Room → Bed lifecycle
+
+### 🛏️ Bed-Level Booking
+
+* Individual bed reservations
+* Date-range availability validation
+* Booking reference generation
+* Booking status lifecycle
+* Cancelled bookings excluded from conflict checks
+* Owner-controlled booking confirmation
+* Stay completion workflow
+
+### 🔔 Event-Driven Notifications
+
+* Apache Kafka integration
+* `booking-events` Kafka topic
 * Asynchronous notification processing
+* Kafka consumer groups
+* Booking event publishing and consumption
+* Email/SMS notification simulation
+
+### 🔐 Security
+
+* JWT authentication
+* HMAC-SHA384 token signing
+* BCrypt password hashing
+* Gateway-level authentication
+* Role-based authorization
+* User identity propagation through trusted headers
+
+### 🌐 Frontend
+
+* React 19 + Vite
+* React Router
+* Axios
+* Axios request/response interceptors
+* Protected routes
+* Role-based UI
+* Hostel search and filtering
+* Bed selection
+* Booking management
+* Responsive dark-mode UI
 
 ---
 
-# 🏗️ System Architecture
+# 🏗️ Architecture
+
+PG Finder follows a **microservices architecture** with independent services and a Database-per-Service design.
 
 ```mermaid
 flowchart TD
 
-    Client["🌐 Client<br/>React / Postman"] --> Gateway["🚪 API Gateway<br/>Port: 9090"]
+    UI["🖥️ React 19 + Vite<br/>Port 5173"]
 
-    Gateway --> Eureka["🔍 Eureka Server<br/>Port: 8761"]
+    GW["🚪 API Gateway<br/>Port 9090"]
 
-    Gateway --> User["👤 User Service<br/>Port: 9191"]
-    Gateway --> Hostel["🏢 Hostel Service<br/>Port: 9192"]
-    Gateway --> Booking["📅 Booking Service<br/>Port: 9193"]
+    EUREKA["🔍 Eureka Server<br/>Port 8761"]
 
-    User --> UserDB[("MySQL<br/>user_db")]
-    Hostel --> HostelDB[("MySQL<br/>hostel_db")]
-    Booking --> BookingDB[("MySQL<br/>booking_db")]
+    USER["👤 User Service<br/>Port 9191"]
+    HOSTEL["🏢 Hostel Service<br/>Port 9192"]
+    BOOKING["📅 Booking Service<br/>Port 9193"]
+    NOTIFICATION["📩 Notification Service<br/>Port 9194"]
 
-    Booking -->|OpenFeign| Hostel
-    Booking -->|OpenFeign| User
+    USERDB[("user_db")]
+    HOSTELDB[("hostel_db")]
+    BOOKINGDB[("booking_db")]
 
-    Booking -->|Publish Booking Event| Kafka["⚡ Apache Kafka<br/>booking-events"]
+    KAFKA["⚡ Apache Kafka<br/>Port 9092<br/>booking-events"]
 
-    Kafka -->|Consume Event| Notification["📩 Notification Service<br/>Port: 9194"]
+    UI -->|"HTTP + JWT"| GW
+
+    GW <--> EUREKA
+
+    GW --> USER
+    GW --> HOSTEL
+    GW --> BOOKING
+
+    USER <--> EUREKA
+    HOSTEL <--> EUREKA
+    BOOKING <--> EUREKA
+
+    USER --> USERDB
+    HOSTEL --> HOSTELDB
+    BOOKING --> BOOKINGDB
+
+    BOOKING -->|"OpenFeign"| HOSTEL
+    BOOKING -->|"OpenFeign"| USER
+
+    BOOKING -->|"Publish Event"| KAFKA
+    KAFKA -->|"Consume Event"| NOTIFICATION
 ```
+
+---
+
+# 🔄 Request Flow
+
+A typical booking request follows this flow:
+
+```text
+React Frontend
+      │
+      │ HTTP + Bearer JWT
+      ▼
+API Gateway :9090
+      │
+      │ JWT Validation
+      │ X-User-Id
+      │ X-User-Role
+      ▼
+Booking Service :9193
+      │
+      ├──────────────► User Service :9191
+      │                 OpenFeign
+      │
+      ├──────────────► Hostel Service :9192
+      │                 OpenFeign
+      │                 Bed Validation
+      │
+      ▼
+Booking Database
+      │
+      │ Booking Event
+      ▼
+Apache Kafka
+      │
+      │ booking-events
+      ▼
+Notification Service :9194
+      │
+      ▼
+Email / Notification Processing
+```
+
+The Gateway validates the JWT and propagates the authenticated user's identity to downstream services using headers such as `X-User-Id` and `X-User-Role`.
 
 ---
 
 # 🧩 Microservices
 
-| Service              |   Port | Technology                         | Database     | Responsibility                             |
-| -------------------- | -----: | ---------------------------------- | ------------ | ------------------------------------------ |
-| Eureka Server        | `8761` | Spring Cloud Eureka                | —            | Service discovery and registration         |
-| API Gateway          | `9090` | Spring Cloud Gateway               | —            | Routing, authentication filtering and CORS |
-| User Service         | `9191` | Spring Boot, Spring Security, JJWT | `user_db`    | Users, authentication and authorization    |
-| Hostel Service       | `9192` | Spring Boot, Spring Data JPA       | `hostel_db`  | Hostels, rooms and beds                    |
-| Booking Service      | `9193` | Spring Boot, OpenFeign, Kafka      | `booking_db` | Reservations and booking lifecycle         |
-| Notification Service | `9194` | Spring Boot, Spring Kafka          | —            | Asynchronous event processing              |
-| Kafka Broker         | `9092` | Apache Kafka                       | —            | Event streaming                            |
+| Service              |   Port | Database     | Responsibility                    |
+| -------------------- | -----: | ------------ | --------------------------------- |
+| Eureka Server        | `8761` | —            | Service discovery                 |
+| API Gateway          | `9090` | —            | Routing, CORS, JWT authentication |
+| User Service         | `9191` | `user_db`    | Authentication & users            |
+| Hostel Service       | `9192` | `hostel_db`  | Hostels, rooms & beds             |
+| Booking Service      | `9193` | `booking_db` | Reservations & conflict detection |
+| Notification Service | `9194` | —            | Kafka event consumer              |
+| Kafka                | `9092` | —            | Event streaming                   |
+| MySQL                | `3306` | Multiple     | Persistent storage                |
+| React UI             | `5173` | —            | Frontend application              |
+
+The service and port structure follows the project's documented architecture.
 
 ---
 
-# 🔐 Authentication & Authorization
+# 🔍 Service Responsibilities
 
-PG Finder uses **JWT-based authentication**.
+## 1. Eureka Server
 
-### Authentication Flow
+**Port:** `8761`
+
+Netflix Eureka acts as the service registry.
+
+Microservices register themselves using their application names, allowing other services to discover them dynamically instead of relying on hardcoded hostnames and ports.
 
 ```text
-User
- │
- │ Login
- ▼
-User Service
- │
- │ Validate credentials
- │
- │ Generate JWT
- ▼
-JWT Token
- │
- │ Subsequent requests
- ▼
-API Gateway
- │
- │ Validate JWT
- ▼
-Downstream Microservice
+USER-SERVICE
+HOSTEL-SERVICE
+BOOKING-SERVICE
 ```
 
-Passwords are securely stored using **BCrypt hashing**.
+---
 
-The application supports three roles:
+## 2. API Gateway
+
+**Port:** `9090`
+
+The API Gateway is the single entry point for frontend requests.
+
+Responsibilities:
+
+* Request routing
+* JWT validation
+* CORS handling
+* Authentication filtering
+* Identity propagation
+* Service discovery integration
+* Public endpoint whitelisting
+
+Example routes:
 
 ```text
-USER
+/api/v1/auth/**      → USER-SERVICE
+/api/v1/users/**     → USER-SERVICE
+
+/api/v1/hostels/**   → HOSTEL-SERVICE
+
+/api/v1/bookings/**  → BOOKING-SERVICE
+```
+
+---
+
+## 3. User Service
+
+**Port:** `9191`
+
+Responsible for:
+
+* Registration
+* Login
+* User management
+* Password hashing
+* JWT generation
+* Role management
+
+Roles:
+
+```text
+RESIDENT
 OWNER
 ADMIN
 ```
 
-### Example
-
-| Role    | Example Responsibility                        |
-| ------- | --------------------------------------------- |
-| `USER`  | Search PGs and create/manage bookings         |
-| `OWNER` | Manage PG/hostel properties                   |
-| `ADMIN` | Administrative operations and user management |
+Passwords are stored using BCrypt, while JWTs are signed using HMAC-SHA384 according to the project's documented implementation.
 
 ---
 
-# 🚪 API Gateway
+## 4. Hostel Service
 
-The **API Gateway** acts as the single entry point for client requests.
+**Port:** `9192`
 
-Responsibilities include:
+Responsible for hostel inventory.
 
-* Request routing
-* JWT validation
-* CORS configuration
-* Authentication filtering
-* Forwarding requests to appropriate microservices
-* Service discovery integration
-
-Example:
+The domain hierarchy is:
 
 ```text
-Client
-   |
-   | GET /api/v1/hostels
-   ▼
-API Gateway :9090
-   |
-   | Discover hostel-service through Eureka
-   ▼
-Hostel Service :9192
+Hostel
+   │
+   ├── Room
+   │      ├── Bed
+   │      ├── Bed
+   │      └── Bed
+   │
+   └── Room
+          ├── Bed
+          └── Bed
 ```
 
-Clients do not need to directly communicate with individual microservice ports.
+A hostel contains multiple rooms, and each room contains multiple beds.
+
+The service manages:
+
+* Hostel details
+* Address
+* Owner
+* Gender policy
+* Amenities
+* Rooms
+* Beds
+* Room types
+* Bed status
+
+The documented JPA relationships use cascading and orphan removal for the Hostel → Room → Bed hierarchy.
 
 ---
 
-# 🔍 Service Discovery with Eureka
+## 5. Booking Service
 
-The project uses **Netflix Eureka Server** for service registration and discovery.
+**Port:** `9193`
 
-Each microservice registers itself with Eureka.
+The Booking Service is responsible for reservation orchestration.
 
-```text
-              Eureka Server
-                 :8761
-                    |
-       +------------+------------+
-       |            |            |
-       ▼            ▼            ▼
- user-service  hostel-service  booking-service
-```
-
-Instead of relying on fixed service URLs, services can communicate using registered service names.
-
-For example:
-
-```text
-lb://USER-SERVICE
-lb://HOSTEL-SERVICE
-lb://BOOKING-SERVICE
-```
-
-This makes the architecture more suitable for running multiple instances of a service.
-
----
-
-# 🔄 Inter-Service Communication
-
-PG Finder uses **OpenFeign** for synchronous communication between services.
-
-### Booking → Hostel
-
-When creating a booking, the Booking Service can communicate with the Hostel Service to retrieve or verify relevant hostel/room/bed information.
-
-```text
-Booking Service
-       |
-       | OpenFeign
-       ▼
-Hostel Service
-       |
-       ▼
-Room / Bed Information
-```
-
-### Booking → User
-
-The Booking Service can also communicate with the User Service when user information is required.
-
-```text
-Booking Service
-       |
-       | OpenFeign
-       ▼
-User Service
-```
-
----
-
-# ⚡ Event-Driven Architecture with Kafka
-
-Apache Kafka is used for **asynchronous event processing**.
-
-The Booking Service acts as a Kafka producer, while the Notification Service acts as a Kafka consumer.
-
-```text
-Booking Service
-      |
-      | Publish
-      ▼
- booking-events
-      |
-      | Consume
-      ▼
-Notification Service
-```
-
-### Booking Event
-
-A booking event can contain information such as:
-
-```text
-Booking ID
-User ID
-Hostel / Bed information
-Booking status
-Timestamp
-```
-
-Booking lifecycle states include:
+Booking states:
 
 ```text
 PENDING
+   │
+   ▼
 CONFIRMED
-CANCELLED
+   │
+   ▼
+COMPLETED
 ```
 
-The notification process is separated from the booking request so that notification handling does not need to be tightly coupled with the booking transaction.
+Cancellation can transition:
+
+```text
+PENDING ───────► CANCELLED
+
+CONFIRMED ─────► CANCELLED
+```
+
+The service communicates with other services using OpenFeign when it requires information such as bed or user validation.
 
 ---
 
-# 🗄️ Database-per-Service
+## 6. Notification Service
 
-Each business microservice owns its own database/schema.
+**Port:** `9194`
+
+The Notification Service is a stateless Kafka consumer.
+
+It listens to:
 
 ```text
+booking-events
+```
+
+using:
+
+```text
+notification-group
+```
+
+It processes booking events and performs notification processing asynchronously.
+
+---
+
+# 🗄️ Database Architecture
+
+PG Finder follows the **Database-per-Service Pattern**.
+
+```text
+                    MySQL
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+        ▼             ▼             ▼
+    user_db       hostel_db     booking_db
+        │             │             │
+        ▼             ▼             ▼
+   User Service  Hostel Service Booking Service
+```
+
+### `user_db`
+
+Contains user-related information.
+
+```text
+users
+```
+
+### `hostel_db`
+
+Contains:
+
+```text
+hostels
+rooms
+beds
+hostel_amenities
+```
+
+### `booking_db`
+
+Contains:
+
+```text
+bookings
+```
+
+Each service owns its database and communicates with other services through APIs or events instead of directly accessing another service's database.
+
+---
+
+# 🔐 Authentication Flow
+
+```text
+User
+ │
+ │ email + password
+ ▼
 User Service
-     │
-     └── user_db
+ │
+ │ BCrypt password verification
+ ▼
+JWT Generation
+ │
+ ▼
+React Frontend
+ │
+ │ Authorization: Bearer <JWT>
+ ▼
+API Gateway
+ │
+ │ Validate signature + expiration
+ │
+ │ Extract:
+ │   userId
+ │   role
+ │   email
+ ▼
+Downstream Service
+```
 
-Hostel Service
-     │
-     └── hostel_db
+The Gateway propagates the authenticated identity using headers:
 
+```text
+X-User-Id
+X-User-Role
+X-User-Email
+```
+
+This allows downstream services to use the already validated identity information without repeatedly parsing the JWT.
+
+---
+
+# 📅 Booking Conflict Detection
+
+A major business rule in PG Finder is preventing two active reservations from overlapping for the same bed.
+
+Two booking intervals overlap when:
+
+```text
+existing.checkIn < new.checkOut
+AND
+existing.checkOut > new.checkIn
+```
+
+The application also excludes cancelled bookings:
+
+```text
+status != CANCELLED
+```
+
+Conceptually:
+
+```text
+Existing Booking
+|----------------------|
+
+          New Booking
+       |------------------|
+
+              ❌ Conflict
+```
+
+If an active overlapping booking exists, the reservation request is rejected with:
+
+```text
+HTTP 409 Conflict
+```
+
+The project specifically fixed a "ghost booking" issue where cancelled bookings were incorrectly blocking subsequent reservations.
+
+---
+
+# ⚡ Apache Kafka
+
+Kafka is used for asynchronous booking events.
+
+### Topic
+
+```text
+booking-events
+```
+
+### Producer
+
+```text
 Booking Service
-     │
-     └── booking_db
 ```
 
-This follows the **Database-per-Service** pattern.
-
-### Advantages
-
-* Service-level data ownership
-* Reduced database coupling
-* Independent schema evolution
-* Better service isolation
-* Independent deployment possibilities
-
-A service should not directly access another service's database.
-
-Instead:
+### Consumer
 
 ```text
-❌ Booking Service → hostel_db
-
-✅ Booking Service → Hostel Service API
+Notification Service
 ```
 
----
-
-# 📡 API Endpoints
-
-All client requests are intended to go through:
+### Event Flow
 
 ```text
-http://localhost:9090
+Booking Service
+      │
+      │ BookingEventDto
+      ▼
+booking-events
+      │
+      ▼
+Notification Service
+      │
+      ├── Email
+      └── SMS / Notification
 ```
 
-## 🔐 Authentication & Users
-
-| Method | Endpoint                | Access        | Description                 |
-| ------ | ----------------------- | ------------- | --------------------------- |
-| `POST` | `/api/v1/auth/register` | Public        | Register a user             |
-| `POST` | `/api/v1/auth/login`    | Public        | Authenticate and obtain JWT |
-| `GET`  | `/api/v1/users/me`      | Authenticated | Get current user profile    |
-| `GET`  | `/api/v1/users`         | ADMIN         | Get registered users        |
+The booking reference can be used as the Kafka message key so that events belonging to the same booking are routed to the same partition, preserving ordering within that partition.
 
 ---
 
-## 🏢 Hostels & Inventory
+# 🔗 OpenFeign Communication
 
-| Method | Endpoint               | Access        | Description           |
-| ------ | ---------------------- | ------------- | --------------------- |
-| `GET`  | `/api/v1/hostels`      | Authenticated | Get available hostels |
-| `GET`  | `/api/v1/hostels/{id}` | Authenticated | Get hostel details    |
-| `POST` | `/api/v1/hostels`      | OWNER / ADMIN | Create hostel         |
-| `GET`  | `/api/v1/rooms`        | Authenticated | Get rooms             |
-| `GET`  | `/api/v1/beds`         | Authenticated | Get bed information   |
-
----
-
-## 📅 Bookings
-
-| Method  | Endpoint                        | Access        | Description         |
-| ------- | ------------------------------- | ------------- | ------------------- |
-| `POST`  | `/api/v1/bookings`              | Authenticated | Create a booking    |
-| `GET`   | `/api/v1/bookings`              | Authenticated | Get booking history |
-| `PATCH` | `/api/v1/bookings/{id}/confirm` | OWNER / ADMIN | Confirm booking     |
-| `PATCH` | `/api/v1/bookings/{id}/cancel`  | Authenticated | Cancel booking      |
-
----
-
-# 🔁 Booking Workflow
-
-A typical booking flow is:
-
-```text
-1. User logs in
-       ↓
-2. User receives JWT
-       ↓
-3. User searches available hostels
-       ↓
-4. User selects a room/bed
-       ↓
-5. User sends booking request
-       ↓
-6. API Gateway validates JWT
-       ↓
-7. Booking Service receives request
-       ↓
-8. Booking Service communicates with required services
-       ↓
-9. Booking is created
-       ↓
-10. Booking event is published to Kafka
-       ↓
-11. Notification Service consumes event
-       ↓
-12. Notification is processed asynchronously
-```
-
----
-
-# 🛠️ Technologies Used
-
-### Backend
-
-* Java
-* Spring Boot
-* Spring MVC / REST
-* Spring Data JPA
-* Spring Security
-* Spring Cloud
-* Spring Cloud Gateway
-* Spring Cloud OpenFeign
-* Netflix Eureka
-* Spring Kafka
-* JJWT
-* Lombok
-
-### Database
-
-* MySQL 8.0
-
-### Messaging
-
-* Apache Kafka
-* Kafka KRaft mode
-
-### Development Tools
-
-* Maven
-* Git
-* GitHub
-* Postman
-* IntelliJ IDEA / Eclipse / VS Code
-
----
-
-# 📂 Project Structure
-
-A typical repository structure is:
-
-```text
-PG-Finder/
-│
-├── eureka-server/
-│
-├── api-gateway/
-│
-├── user-service/
-│
-├── hostel-service/
-│
-├── booking-service/
-│
-├── notification-service/
-│
-└── README.md
-```
-
-Each microservice follows a layered structure such as:
-
-```text
-src/
-└── main/
-    ├── java/
-    │   └── com.pgfinder/
-    │       ├── controller/
-    │       ├── service/
-    │       ├── repository/
-    │       ├── entity/
-    │       ├── dto/
-    │       ├── exception/
-    │       └── config/
-    │
-    └── resources/
-        └── application.properties
-```
-
----
-
-# ⚙️ Local Setup Guide
-
-## Prerequisites
-
-Install the following:
-
-* JDK 17 or 21
-* Maven 3.8+
-* MySQL 8.0+
-* Apache Kafka 4.x
-* Git
-* Postman
-
----
-
-## 1️⃣ Clone the Repository
-
-```bash
-git clone https://github.com/venky4378/PG-Finder.git
-```
-
-```bash
-cd PG-Finder
-```
-
-> Update the repository URL above if your actual PG Finder repository uses a different GitHub name.
-
----
-
-## 2️⃣ Create MySQL Databases
-
-Open MySQL Workbench or MySQL CLI and execute:
-
-```sql
-CREATE DATABASE IF NOT EXISTS user_db;
-CREATE DATABASE IF NOT EXISTS hostel_db;
-CREATE DATABASE IF NOT EXISTS booking_db;
-```
-
-Configure the database credentials in the corresponding microservice configuration files.
+Booking Service uses OpenFeign for synchronous communication.
 
 Example:
 
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/user_db
-spring.datasource.username=root
-spring.datasource.password=YOUR_PASSWORD
+```java
+@FeignClient(name = "HOSTEL-SERVICE")
+public interface HostelServiceClient {
+
+    @GetMapping("/api/v1/hostels/beds/{bedId}")
+    BedResponseDto getBedDetails(
+        @PathVariable("bedId") Long bedId
+    );
+
+    @GetMapping("/api/v1/hostels/{id}")
+    HostelResponseDto getHostelById(
+        @PathVariable("id") Long id
+    );
+}
+```
+
+Instead of hardcoding:
+
+```text
+http://localhost:9192
+```
+
+the service uses:
+
+```text
+HOSTEL-SERVICE
+```
+
+and Eureka/LoadBalancer handles service discovery and instance selection.
+
+---
+
+# 👥 Role-Based Access Control
+
+| Feature            | Resident | Owner | Admin |
+| ------------------ | :------: | :---: | :---: |
+| Browse Hostels     |     ✅    |   ✅   |   ✅   |
+| View Rooms/Beds    |     ✅    |   ✅   |   ✅   |
+| Book Bed           |     ✅    |   ❌   |   ❌   |
+| Cancel Own Booking |     ✅    |   ❌   |   ❌   |
+| Create Hostel      |     ❌    |   ✅   |   ❌   |
+| Manage Own Hostel  |     ❌    |   ✅   |   ❌   |
+| Confirm Booking    |     ❌    |   ✅   |   ❌   |
+| Complete Booking   |     ❌    |   ✅   |   ❌   |
+| Delete Hostel      |     ❌    |  Own  |  Any  |
+| Manage Users       |     ❌    |   ❌   |   ✅   |
+
+The project's access model separates resident booking responsibilities, owner property operations, and administrative platform management.
+
+---
+
+# 🎨 Frontend Architecture
+
+The frontend is built with:
+
+* React 19
+* Vite
+* React Router
+* Axios
+* Context API
+* JavaScript
+* CSS
+
+Project structure:
+
+```text
+pg-finder-ui/
+│
+├── src/
+│   ├── api/
+│   │   └── AxiosClient.jsx
+│   │
+│   ├── components/
+│   │   └── Navbar.jsx
+│   │
+│   ├── context/
+│   │   └── AuthContext.jsx
+│   │
+│   ├── pages/
+│   │   ├── LoginPage.jsx
+│   │   ├── RegisterPage.jsx
+│   │   ├── HostelListPage.jsx
+│   │   ├── HostelDetailsPage.jsx
+│   │   ├── MyBookingsPage.jsx
+│   │   └── UsersPage.jsx
+│   │
+│   ├── App.jsx
+│   ├── App.css
+│   └── main.jsx
+```
+
+Axios interceptors automatically attach the JWT to outgoing requests and handle `401 Unauthorized` responses by clearing the session and redirecting the user to the login page.
+
+---
+
+# 🐛 Important Problems Solved
+
+## 1. Ghost Booking Conflict
+
+### Problem
+
+A cancelled booking continued to block the same bed.
+
+### Cause
+
+The overlap query did not exclude cancelled bookings.
+
+### Solution
+
+Added:
+
+```text
+status != CANCELLED
+```
+
+to the conflict query.
+
+---
+
+## 2. Gateway CORS 401
+
+### Problem
+
+Browser requests failed with a CORS error.
+
+### Root Cause
+
+The Gateway authentication filter attempted to authenticate browser `OPTIONS` preflight requests.
+
+### Solution
+
+Allow `OPTIONS` requests to pass through before JWT authentication.
+
+```java
+if (exchange.getRequest().getMethod() == HttpMethod.OPTIONS) {
+    return chain.filter(exchange);
+}
+```
+
+This issue and its resolution are documented in the project's RCA section.
+
+---
+
+## 3. DTO Identity Mismatch
+
+### Problem
+
+The frontend expected:
+
+```json
+{
+  "userId": 3
+}
+```
+
+while the backend returned:
+
+```json
+{
+  "id": 3
+}
+```
+
+### Solution
+
+The frontend resolves the identifier using:
+
+```javascript
+const resolvedId =
+    data.id ||
+    data.userId ||
+    parsedJwt?.userId;
+```
+
+This prevented user booking retrieval from failing because of the DTO naming mismatch.
+
+---
+
+# 🛠️ Technology Stack
+
+### Backend
+
+```text
+Java
+Spring Boot
+Spring MVC
+Spring Data JPA
+Spring Security
+Spring Cloud Gateway
+Spring Cloud Netflix Eureka
+OpenFeign
+Spring Kafka
+JJWT
+Lombok
+Maven
+```
+
+### Frontend
+
+```text
+React 19
+Vite
+JavaScript
+Axios
+React Router
+CSS
+```
+
+### Database
+
+```text
+MySQL 8
+Hibernate / JPA
+```
+
+### Messaging
+
+```text
+Apache Kafka
+```
+
+### Architecture Patterns
+
+```text
+Microservices Architecture
+Database-per-Service
+API Gateway
+Service Discovery
+Event-Driven Architecture
+RBAC
+Synchronous REST Communication
+Asynchronous Messaging
 ```
 
 ---
 
-# 3️⃣ Start Kafka
+# 📡 Important API Endpoints
 
-PG Finder uses Apache Kafka in KRaft mode.
+## Authentication
 
-Example Windows setup:
-
-```powershell
-$env:KAFKA_HEAP_OPTS="-Xmx1G -Xms1G"
+```http
+POST /api/v1/auth/register
+POST /api/v1/auth/login
 ```
 
-Format the Kafka storage directory if required:
+## Users
 
-```powershell
-.\bin\windows\kafka-storage.bat format -t YOUR_CLUSTER_ID -c .\config\server.properties --standalone
+```http
+GET    /api/v1/users
+GET    /api/v1/users/{id}
+DELETE /api/v1/users/{id}
 ```
 
-Start Kafka:
+## Hostels
 
-```powershell
-.\bin\windows\kafka-server-start.bat .\config\server.properties
+```http
+GET    /api/v1/hostels
+GET    /api/v1/hostels/{id}
+GET    /api/v1/hostels/owner/{ownerId}
+POST   /api/v1/hostels
+DELETE /api/v1/hostels/{id}
+GET    /api/v1/hostels/beds/{id}
 ```
 
-Kafka should be available on:
+## Bookings
+
+```http
+POST  /api/v1/bookings
+GET   /api/v1/bookings/my
+GET   /api/v1/bookings
+GET   /api/v1/bookings/hostel/{hostelId}
+
+PATCH /api/v1/bookings/{id}/confirm
+PATCH /api/v1/bookings/{id}/complete
+PATCH /api/v1/bookings/{id}/cancel
+```
+
+## The documented endpoint structure is organized around authentication, hostel inventory, and reservation workflows.
+
+# 🚀 Getting Started
+
+## Prerequisites
+
+Install:
+
+```text
+Java 17+
+Maven
+MySQL 8+
+Node.js
+npm
+Apache Kafka
+```
+
+---
+
+## 1. Clone the Repository
+
+```bash
+git clone https://github.com/venky4378/PG-Finder.git
+cd PG-Finder
+```
+
+> Replace the repository URL above if your actual PG Finder repository uses a different name or URL.
+
+---
+
+## 2. Configure MySQL
+
+Create the required databases:
+
+```sql
+CREATE DATABASE user_db;
+CREATE DATABASE hostel_db;
+CREATE DATABASE booking_db;
+```
+
+Configure the database credentials in each microservice's:
+
+```text
+application.properties
+```
+
+or
+
+```text
+application.yml
+```
+
+---
+
+## 3. Start Kafka
+
+Start your Kafka broker and make sure it is available on:
 
 ```text
 localhost:9092
 ```
 
----
-
-# 4️⃣ Start Microservices
-
-Start the services in the following order:
+The application uses:
 
 ```text
-1. Eureka Server       → 8761
-2. User Service        → 9191
-3. Hostel Service      → 9192
-4. Booking Service     → 9193
-5. Notification Service → 9194
-6. API Gateway         → 9090
+booking-events
 ```
 
-Eureka Dashboard:
+for booking event communication.
+
+---
+
+## 4. Start Services
+
+Recommended startup order:
 
 ```text
-http://localhost:8761
+1. Eureka Server
+2. User Service
+3. Hostel Service
+4. Booking Service
+5. Notification Service
+6. API Gateway
+7. React Frontend
+```
+
+---
+
+## 5. Start the React Application
+
+```bash
+cd pg-finder-ui
+npm install
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:5173
 ```
 
 API Gateway:
@@ -562,146 +923,127 @@ API Gateway:
 http://localhost:9090
 ```
 
----
-
-# 🧪 Testing
-
-You can test the APIs using **Postman**.
-
-Recommended flow:
+Eureka:
 
 ```text
-Register
-   ↓
-Login
-   ↓
-Copy JWT
-   ↓
-Send JWT in Authorization header
-   ↓
-Access protected APIs
-   ↓
-Create / manage booking
-   ↓
-Verify Kafka event
-   ↓
-Verify Notification Service consumption
-```
-
-Authorization header:
-
-```text
-Authorization: Bearer <JWT_TOKEN>
+http://localhost:8761
 ```
 
 ---
 
-# 🔒 Security
+# 📊 Service Communication Summary
 
-The application implements:
+| From    | To              | Communication | Purpose                  |
+| ------- | --------------- | ------------- | ------------------------ |
+| React   | Gateway         | REST/HTTP     | Client requests          |
+| Gateway | User Service    | HTTP          | Authentication/user APIs |
+| Gateway | Hostel Service  | HTTP          | Hostel APIs              |
+| Gateway | Booking Service | HTTP          | Booking APIs             |
+| Booking | Hostel Service  | OpenFeign     | Bed/hostel validation    |
+| Booking | User Service    | OpenFeign     | User validation          |
+| Booking | Kafka           | Async         | Publish booking events   |
+| Kafka   | Notification    | Async         | Notification processing  |
 
+---
+
+# 🔮 Future Improvements
+
+Potential production enhancements include:
+
+* Redis caching
+* Redis distributed locking
+* Resilience4j Circuit Breaker
+* Transactional Outbox Pattern
+* Debezium CDC
+* Flyway/Liquibase database migrations
+* Elasticsearch-based hostel search
+* Docker containerization
+* Kubernetes deployment
+* CI/CD pipeline
+* AWS deployment
+* API rate limiting
+* Distributed tracing
+* Centralized logging
+* Prometheus/Grafana monitoring
+* mTLS for internal service communication
+
+For high-concurrency booking scenarios, the project documentation identifies database locking or distributed locking as areas that can strengthen protection against race conditions.
+
+---
+
+# 🧠 Architecture Highlights
+
+This project demonstrates practical implementation of:
+
+* Microservices architecture
+* Domain separation
+* Database-per-Service
+* Service discovery
+* API Gateway
 * JWT authentication
-* BCrypt password hashing
-* Role-based authorization
-* Gateway-level token validation
-* Protected REST endpoints
-* Authenticated user context propagation
+* RBAC
+* OpenFeign
+* Synchronous inter-service communication
+* Apache Kafka
+* Event-driven architecture
+* Booking conflict detection
+* React SPA architecture
+* Axios interceptors
+* Distributed-system failure handling
+* Production debugging and RCA
+
+---
+
+# 📸 Screenshots
+
+Add screenshots of the following to make the repository more convincing:
+
+```text
+1. Login Page
+2. Registration Page
+3. Hostel Listing
+4. Hostel Details
+5. Bed Selection
+6. Booking Page
+7. My Bookings
+8. Owner Dashboard
+9. Admin Dashboard
+10. Eureka Dashboard
+11. Kafka Event Logs
+12. Swagger/API Documentation
+```
 
 Example:
 
-```text
-Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+```markdown
+## 📸 Screenshots
+
+### Login
+![Login](screenshots/login.png)
+
+### Hostel Listing
+![Hostel Listing](screenshots/hostel-list.png)
+
+### Hostel Details
+![Hostel Details](screenshots/hostel-details.png)
+
+### Booking
+![Booking](screenshots/booking.png)
 ```
-
-The API Gateway validates the token before forwarding secured requests.
-
----
-
-# 📐 Design Patterns & Architecture Concepts
-
-The project demonstrates several real-world distributed-system concepts:
-
-### API Gateway Pattern
-
-Central entry point for client requests.
-
-### Database-per-Service Pattern
-
-Each business service owns its own database.
-
-### Service Discovery Pattern
-
-Eureka dynamically tracks service instances.
-
-### Event-Driven Architecture
-
-Kafka decouples booking events from notification processing.
-
-### Synchronous Communication
-
-OpenFeign is used when an immediate response from another service is required.
-
-### Layered Architecture
-
-Controllers, services, repositories, DTOs, entities, and configuration are separated by responsibility.
-
----
-
-# 🚧 Current Roadmap
-
-* [x] Spring Boot Microservices
-* [x] Eureka Service Discovery
-* [x] API Gateway
-* [x] JWT Authentication
-* [x] Role-Based Access Control
-* [x] Database-per-Service
-* [x] OpenFeign Communication
-* [x] Apache Kafka Integration
-* [x] Notification Service
-* [ ] React Frontend
-* [ ] Resilience4j Circuit Breaker
-* [ ] Docker & Docker Compose
-* [ ] Centralized Configuration
-* [ ] Distributed Tracing
-* [ ] AWS Deployment
-* [ ] Kubernetes Deployment
-* [ ] CI/CD Pipeline
-
----
-
-# 🎯 Key Learning Outcomes
-
-Through this project, I gained practical experience with:
-
-* Designing microservices around business domains
-* Building RESTful APIs using Spring Boot
-* Implementing JWT authentication and RBAC
-* Using API Gateway as a centralized entry point
-* Registering and discovering services with Eureka
-* Implementing synchronous communication using OpenFeign
-* Implementing asynchronous communication using Kafka
-* Designing independent service databases
-* Handling distributed service communication
-* Structuring a scalable backend application
 
 ---
 
 # 👨‍💻 Author
 
-### Venkayya Swamy Chamanthi
+**Swamy Ch**
 
-**Java Full Stack Developer**
+Java Full Stack Developer | Spring Boot | Microservices | React | SQL
 
-GitHub: [@venky4378](https://github.com/venky4378)
-
-LinkedIn: [Swamy Ch](https://www.linkedin.com/in/swamy-ch/)
-
-Email: **[venkyswamy437@gmail.com](mailto:venkyswamy437@gmail.com)**
+GitHub:
+https://github.com/venky4378
 
 ---
 
-## ⭐ If you find this project useful
+# 📄 License
 
-Feel free to explore the repository, raise issues, or suggest improvements.
-
-**Built with Java + Spring Boot + Spring Cloud + Kafka + MySQL**
+This project is intended for educational, portfolio, and demonstration purposes.
