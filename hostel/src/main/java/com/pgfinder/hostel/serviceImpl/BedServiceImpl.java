@@ -73,6 +73,20 @@ public class BedServiceImpl implements BedService {
     }
 
     @Override
+    public BedDto updateBedStatus(Long id, String status) {
+        Bed existingBed = bedRepo.findById(id)
+                .orElseThrow(() -> new BedNotFoundException("Bed not found with id: " + id));
+
+        try {
+            existingBed.setStatus(BedStatus.valueOf(status.toUpperCase()));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid bed status: " + status);
+        }
+        Bed updatedBed = bedRepo.save(existingBed);
+        return bedMapper.toDto(updatedBed);
+    }
+
+    @Override
     public void deleteBed(Long id) {
         Bed bed = bedRepo.findById(id).orElseThrow(() -> new BedNotFoundException("Bed not found with id: " + id));
         bedRepo.delete(bed);
@@ -80,17 +94,8 @@ public class BedServiceImpl implements BedService {
 
     @Override
     public BedDto getBedByHostelId(Long hostelId, Long bedId) {
-        Bed bed = bedRepo.findByIdAndRoomHostelId(bedId,hostelId).orElseThrow(()->
-                new BedNotFoundException("Bed "+bedId + "not found in hostel "+hostelId));
+        Bed bed = bedRepo.findByIdAndRoomHostelId(bedId, hostelId).orElseThrow(() ->
+                new BedNotFoundException("Bed " + bedId + " not found in hostel " + hostelId));
         return bedMapper.toDto(bed);
-    }
-
-    @Override
-    public BedDto updateBedStatus(Long id, BedStatus status) {
-        Bed existedBed = bedRepo.findById(id)
-                .orElseThrow(() ->new BedNotFoundException("Bed not Found "+id));
-        existedBed.setStatus(status);
-        Bed updatedBed = bedRepo.save(existedBed);
-        return bedMapper.toDto(updatedBed);
     }
 }

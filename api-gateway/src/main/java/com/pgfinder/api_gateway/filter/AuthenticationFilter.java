@@ -5,6 +5,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -26,6 +27,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     // Whitelist endpoints that do NOT require authentication
     private static final List<String> OPEN_API_ENDPOINTS = List.of(
             "/api/v1/auth",
+            "/api/v1/ai",
             "/eureka"
     );
 
@@ -34,17 +36,25 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
 
         // 1. Allow browser preflight OPTIONS requests without requiring a token
-        if (request.getMethod() == org.springframework.http.HttpMethod.OPTIONS) {
+        if (request.getMethod() == HttpMethod.OPTIONS) {
             return chain.filter(exchange);
         }
 
         String path = request.getURI().getPath();
+        HttpMethod method = request.getMethod();
 
-        // Check if endpoint is secured (not in whitelist)
-        boolean isSecured = OPEN_API_ENDPOINTS.stream().noneMatch(path::startsWith);
+        // Public read-only endpoints (anyone can browse hostels, rooms, beds, amenities)
+        boolean isPublicRead = method == HttpMethod.GET && (
+                path.startsWith("/api/v1/hostels") ||
+                path.startsWith("/api/v1/rooms") ||
+                path.startsWith("/api/v1/beds") ||
+                path.startsWith("/api/v1/amenities")
+        );
 
-        if (isSecured) {
-            // 1. Check if Authorization header is present
+        boolean isWhitelisted = OPEN_API_ENDPOINTS.stream().anyMatch(path::startsWith) || isPublicRead;
+
+        // If endpoint is secured, strict JWT authentication is mandatory
+        if (!isWhitelisted) {
             if (!request.getHeaders().containsHeader(HttpHeaders.AUTHORIZATION)) {
                 return this.onError(exchange, HttpStatus.UNAUTHORIZED);
             }
@@ -54,13 +64,11 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
                 return this.onError(exchange, HttpStatus.UNAUTHORIZED);
             }
 
-            // 2. Validate token
             String token = authHeader.substring(7);
             if (!jwtUtil.isTokenValid(token)) {
                 return this.onError(exchange, HttpStatus.UNAUTHORIZED);
             }
 
-            // 3. Extract claims and propagate to downstream services
             Long userId = jwtUtil.extractUserId(token);
             String role = jwtUtil.extractRole(token);
 
@@ -70,6 +78,25 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
                     .build();
 
             return chain.filter(exchange.mutate().request(mutatedRequest).build());
+        }
+
+        // If whitelisted, check if an optional valid token is present to propagate user identity
+        if (request.getHeaders().containsHeader(HttpHeaders.AUTHORIZATION)) {
+            String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                String token = authHeader.substring(7);
+                if (jwtUtil.isTokenValid(token)) {
+                    Long userId = jwtUtil.extractUserId(token);
+                    String role = jwtUtil.extractRole(token);
+
+                    ServerHttpRequest mutatedRequest = request.mutate()
+                            .header("X-User-Id", String.valueOf(userId))
+                            .header("X-User-Role", role != null ? role : "")
+                            .build();
+
+                    return chain.filter(exchange.mutate().request(mutatedRequest).build());
+                }
+            }
         }
 
         return chain.filter(exchange);

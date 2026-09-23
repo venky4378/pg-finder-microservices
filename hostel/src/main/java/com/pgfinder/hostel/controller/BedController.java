@@ -1,10 +1,8 @@
 package com.pgfinder.hostel.controller;
 
 import com.pgfinder.hostel.dto.BedDto;
-import com.pgfinder.hostel.entity.BedStatus;
 import com.pgfinder.hostel.service.BedService;
 import jakarta.validation.Valid;
-import org.apache.coyote.Response;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,13 +14,13 @@ import java.util.List;
 public class BedController {
 
     private final BedService bedService;
+
     public BedController(BedService bedService) {
         this.bedService = bedService;
     }
 
     @PostMapping("/room/{roomId}")
     public ResponseEntity<BedDto> createBed(@PathVariable Long roomId, @Valid @RequestBody BedDto bedDto) {
-
         BedDto response = bedService.createBed(roomId, bedDto);
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -42,8 +40,8 @@ public class BedController {
     }
 
     @GetMapping("/hostel/{hostelId}/bed/{bedId}")
-    public ResponseEntity<BedDto> getBedByHostelId(@PathVariable Long hostelId, @PathVariable Long bedId){
-        return ResponseEntity.ok(bedService.getBedByHostelId(hostelId,bedId));
+    public ResponseEntity<BedDto> getBedByHostelId(@PathVariable Long hostelId, @PathVariable Long bedId) {
+        return ResponseEntity.ok(bedService.getBedByHostelId(hostelId, bedId));
     }
 
     @PutMapping("/{id}")
@@ -52,14 +50,15 @@ public class BedController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}/status")
+    public ResponseEntity<BedDto> updateBedStatus(@PathVariable Long id, @RequestParam String status) {
+        BedDto response = bedService.updateBedStatus(id, status);
+        return ResponseEntity.ok(response);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteBed(@PathVariable Long id) {
         bedService.deleteBed(id);
         return ResponseEntity.ok("Bed deleted successfully");
-    }
-    @PutMapping("/{id}/status")
-    public ResponseEntity<BedDto> updateBedStatus(@PathVariable Long id, @RequestParam BedStatus status) {
-        BedDto response = bedService.updateBedStatus(id, status);
-        return ResponseEntity.ok(response);
     }
 }
