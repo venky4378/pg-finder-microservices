@@ -3,20 +3,24 @@ package com.pgfinder.api_gateway.util;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
+import static java.security.KeyRep.Type.SECRET;
+
 @Component
 public class JwtUtil {
 
     // Same 256-bit secret key used in user-service
-    private static final String SECRET = "pgfindersecretkey1234567890pgfindersecretkey1234567890";
+    @Value("${jwt.secret}")
+    private  String secret;
 
     private SecretKey getSecretKey() {
-        return Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     public Claims extractClaims(String token) {

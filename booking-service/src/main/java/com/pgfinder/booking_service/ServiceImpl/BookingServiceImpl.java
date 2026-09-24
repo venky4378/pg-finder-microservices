@@ -2,6 +2,7 @@ package com.pgfinder.booking_service.serviceImpl;
 
 import com.pgfinder.booking_service.client.BedClientResponseDto;
 import com.pgfinder.booking_service.client.HostelClient;
+import com.pgfinder.booking_service.client.HostelClientResponseDto;
 import com.pgfinder.booking_service.client.UserClient;
 import com.pgfinder.booking_service.dto.BookingRequestDto;
 import com.pgfinder.booking_service.dto.BookingResponseDto;
@@ -15,6 +16,7 @@ import com.pgfinder.booking_service.service.BookingEvent;
 import com.pgfinder.booking_service.service.BookingService;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,47 +40,39 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    @Transactional // 👈 Guarantees atomic booking creation
     public BookingResponseDto createBooking(BookingRequestDto bookingRequestDto) {
-
         // 1. Validate booking dates
         validateBookingDates(bookingRequestDto);
-        // 2. Check whether user exists
+        // 2. Check user exists
         userClient.getUserById(bookingRequestDto.getUserId());
-
-        // 3. Check whether hostel exists
+        // 3. Check hostel exists
         hostelClient.getHostelById(bookingRequestDto.getHostelId());
-        // 4. Check whether bed exists
-        BedClientResponseDto bed =
-                hostelClient.getBedByHostelId(
-                        bookingRequestDto.getHostelId(),
-                        bookingRequestDto.getBedId()
-                );        // 5. Check whether bed is available
+        // 4. Check bed exists and is available
+        BedClientResponseDto bed = hostelClient.getBedByHostelId(
+                bookingRequestDto.getHostelId(),
+                bookingRequestDto.getBedId()
+        );
         if (!"AVAILABLE".equals(bed.getStatus())) {
             throw new InvalidBookingException("Bed is not available: " + bookingRequestDto.getBedId());
         }
-        // 6. Check whether bed is already booked for these dates (excluding CANCELLED bookings)
-        boolean alreadyBooked =
-                bookingRepository
-                        .existsByBedIdAndStatusNotAndCheckInDateLessThanAndCheckOutDateGreaterThan(
-                                bookingRequestDto.getBedId(),
-                                BookingStatus.CANCELLED,
-                                bookingRequestDto.getCheckOutDate(),
-                                bookingRequestDto.getCheckInDate()
-                        );
-
+        // 5. Date overlap conflict check
+        boolean alreadyBooked = bookingRepository
+                .existsByBedIdAndStatusNotAndCheckInDateLessThanAndCheckOutDateGreaterThan(
+                        bookingRequestDto.getBedId(),
+                        BookingStatus.CANCELLED,
+                        bookingRequestDto.getCheckOutDate(),
+                        bookingRequestDto.getCheckInDate()
+                );
         if (alreadyBooked) {
-            throw new InvalidBookingException(
-                    "Bed is already booked for the selected dates"
-            );
+            throw new InvalidBookingException("Bed is already booked for the selected dates");
         }
-        // 7. Create booking
+        // 6. Save booking
         Booking booking = bookingMapper.toEntity(bookingRequestDto);
         booking.setStatus(BookingStatus.PENDING);
-        // 8. Save booking
         Booking savedBooking = bookingRepository.save(booking);
-        sendBookingEvent(savedBooking, "PENDING"); // <-- Publish Kafka Event
-        // 9. Return response
-
+        // 7. Publish Kafka event
+        sendBookingEvent(savedBooking, "PENDING");
         return bookingMapper.toResponse(savedBooking);
     }
 
@@ -124,19 +118,13 @@ public class BookingServiceImpl implements BookingService {
         bookingRepository.delete(booking);
     }
 
-    private void validateBookingDates(BookingRequestDto bookingRequestDto) {
-
-        if (!bookingRequestDto.getCheckOutDate()
-                .isAfter(bookingRequestDto.getCheckInDate())) {
-            throw new InvalidBookingException("Check-out date must be after check-in date");
-        }
-    }
-
     @Override
-    public BookingResponseDto confirmBooking(Long id) {
+    @Transactional
+    public BookingResponseDto confirmBooking(Long id, Long userId, String role) {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + id));
-
+        // Strict Owner Check: Only the OWNER of this hostel can confirm (Reject ADMIN)
+        validateHostelOwner(booking, userId, role);
         if (booking.getStatus() == BookingStatus.CONFIRMED) {
             throw new InvalidBookingException("Booking is already confirmed");
         }
@@ -146,56 +134,52 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getStatus() == BookingStatus.COMPLETED) {
             throw new InvalidBookingException("Cannot confirm a completed booking");
         }
-
-        // 1. Update booking status
         booking.setStatus(BookingStatus.CONFIRMED);
         Booking savedBooking = bookingRepository.save(booking);
-
-        // 2. Automatically mark Bed as OCCUPIED in hostel-service via OpenFeign!
+        // Synchronize bed status via Feign
         hostelClient.updateBedStatus(savedBooking.getBedId(), "OCCUPIED");
-        sendBookingEvent(savedBooking, "CONFIRMED"); // <-- Add this line
+        sendBookingEvent(savedBooking, "CONFIRMED");
         return bookingMapper.toResponse(savedBooking);
     }
 
     @Override
-    public BookingResponseDto cancelBooking(Long id) {
+    @Transactional
+    public BookingResponseDto cancelBooking(Long id, Long userId, String role) {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + id));
-
+        // Strict Owner Check: Only the OWNER of this hostel can cancel (Reject ADMIN)
+        validateHostelOwner(booking, userId, role);
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             throw new InvalidBookingException("Booking is already cancelled");
         }
         if (booking.getStatus() == BookingStatus.COMPLETED) {
             throw new InvalidBookingException("Cannot cancel an already completed booking");
         }
-
-        // 1. Update booking status
         booking.setStatus(BookingStatus.CANCELLED);
         Booking savedBooking = bookingRepository.save(booking);
-
-        // 2. Automatically release Bed back to AVAILABLE in hostel-service via OpenFeign!
+        // Release bed
         hostelClient.updateBedStatus(savedBooking.getBedId(), "AVAILABLE");
-        sendBookingEvent(savedBooking, "CANCELLED"); // <-- Add this line
+        sendBookingEvent(savedBooking, "CANCELLED");
         return bookingMapper.toResponse(savedBooking);
     }
 
     @Override
-    public BookingResponseDto completeBooking(Long id) {
+    @Transactional
+    public BookingResponseDto completeBooking(Long id, Long userId, String role) {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + id));
-
+        // Strict Owner Check: Only the OWNER of this hostel can complete (Reject ADMIN)
+        validateHostelOwner(booking, userId, role);
         if (booking.getStatus() != BookingStatus.CONFIRMED) {
             throw new InvalidBookingException("Only CONFIRMED bookings can be completed. Current status: " + booking.getStatus());
         }
-
-        // 1. Update booking status
         booking.setStatus(BookingStatus.COMPLETED);
         Booking savedBooking = bookingRepository.save(booking);
-
-        // 2. Automatically release Bed back to AVAILABLE in hostel-service via OpenFeign!
+        // Release bed back to AVAILABLE
         hostelClient.updateBedStatus(savedBooking.getBedId(), "AVAILABLE");
         return bookingMapper.toResponse(savedBooking);
     }
+
     private void sendBookingEvent(Booking booking, String status) {
         BookingEvent event = BookingEvent.builder()
                 .bookingId(booking.getId())
@@ -210,5 +194,24 @@ public class BookingServiceImpl implements BookingService {
 
         kafkaTemplate.send("booking-events", String.valueOf(booking.getId()), event);
         System.out.println("📢 [KAFKA EVENT PUBLISHED] Booking #" + booking.getId() + " - Status: " + status);
+    }
+
+    // Helper: Enforce that ONLY the property OWNER can manage this booking (Reject ADMIN)
+    private void validateHostelOwner(Booking booking, Long userId, String role) {
+        if (userId == null || !"OWNER".equalsIgnoreCase(role)) {
+            throw new InvalidBookingException("Access Denied: Only property owners can perform this action.");
+        }
+        HostelClientResponseDto hostel = hostelClient.getHostelById(booking.getHostelId());
+        if (hostel == null || !userId.equals(hostel.getOwnerId())) {
+            throw new InvalidBookingException("Access Denied: You do not own the hostel for this booking.");
+        }
+    }
+
+    private void validateBookingDates(BookingRequestDto bookingRequestDto) {
+
+        if (!bookingRequestDto.getCheckOutDate()
+                .isAfter(bookingRequestDto.getCheckInDate())) {
+            throw new InvalidBookingException("Check-out date must be after check-in date");
+        }
     }
 }

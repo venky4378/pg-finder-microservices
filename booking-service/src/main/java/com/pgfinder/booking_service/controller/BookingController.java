@@ -20,55 +20,71 @@ public class BookingController {
         this.bookingService = bookingService;
     }
 
+    // 1. Create Booking: Only USER (Resident) allowed, userId forced from header
     @PostMapping
-    public ResponseEntity<BookingResponseDto> createBooking(@Valid @RequestBody BookingRequestDto bookingRequestDto) {
+    public ResponseEntity<?> createBooking(
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @Valid @RequestBody BookingRequestDto bookingRequestDto) {
 
+        if (userId == null || !"USER".equalsIgnoreCase(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Access Denied: Only residents (USER role) can make reservations.");
+        }
+
+        // Force userId from the verified Gateway header (prevent identity spoofing)
+        bookingRequestDto.setUserId(userId);
         BookingResponseDto response = bookingService.createBooking(bookingRequestDto);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     @GetMapping
     public ResponseEntity<List<BookingResponseDto>> getAllBookings() {
-
-        List<BookingResponseDto> response = bookingService.getAllBookings();
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return ResponseEntity.ok(bookingService.getAllBookings());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<BookingResponseDto> getBookingById(@PathVariable Long id) {
-        BookingResponseDto response = bookingService.getBookingById(id);
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return ResponseEntity.ok(bookingService.getBookingById(id));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<BookingResponseDto> updateBooking(@PathVariable Long id,
+    public ResponseEntity<BookingResponseDto> updateBooking(
+            @PathVariable Long id,
             @Valid @RequestBody BookingRequestDto bookingRequestDto) {
-        BookingResponseDto response = bookingService.updateBooking(id, bookingRequestDto);
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return ResponseEntity.ok(bookingService.updateBooking(id, bookingRequestDto));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteBooking(@PathVariable Long id) {
         bookingService.deleteBooking(id);
-        return new ResponseEntity<>("Booking deleted successfully", HttpStatus.OK
-        );
+        return ResponseEntity.ok("Booking deleted successfully");
     }
 
+    // 2. Confirm Booking: Only the hostel's OWNER
     @PatchMapping("/{id}/confirm")
-    public ResponseEntity<BookingResponseDto> confirmBooking(@PathVariable Long id) {
-        BookingResponseDto response = bookingService.confirmBooking(id);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<BookingResponseDto> confirmBooking(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Role", required = false) String role) {
+        return ResponseEntity.ok(bookingService.confirmBooking(id, userId, role));
     }
 
+    // 3. Cancel Booking: Only the hostel's OWNER
     @PatchMapping("/{id}/cancel")
-    public ResponseEntity<BookingResponseDto> cancelBooking(@PathVariable Long id) {
-        BookingResponseDto response = bookingService.cancelBooking(id);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<BookingResponseDto> cancelBooking(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Role", required = false) String role) {
+        return ResponseEntity.ok(bookingService.cancelBooking(id, userId, role));
     }
 
+    // 4. Complete Booking: Only the hostel's OWNER
     @PatchMapping("/{id}/complete")
-    public ResponseEntity<BookingResponseDto> completeBooking(@PathVariable Long id) {
-        BookingResponseDto response = bookingService.completeBooking(id);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<BookingResponseDto> completeBooking(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Role", required = false) String role) {
+        return ResponseEntity.ok(bookingService.completeBooking(id, userId, role));
     }
 }

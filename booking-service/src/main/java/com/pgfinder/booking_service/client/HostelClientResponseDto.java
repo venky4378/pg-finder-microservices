@@ -7,4 +7,6 @@ public class HostelClientResponseDto {
 
     private Long id;
     private String name;
+    private Long ownerId; // 👈 Add this field
+
 }

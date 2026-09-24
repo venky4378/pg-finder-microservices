@@ -24,7 +24,6 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         this.jwtUtil = jwtUtil;
     }
 
-    // Whitelist endpoints that do NOT require authentication
     private static final List<String> OPEN_API_ENDPOINTS = List.of(
             "/api/v1/auth",
             "/api/v1/ai",
@@ -40,66 +39,78 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        String path = request.getURI().getPath();
-        HttpMethod method = request.getMethod();
+        // 2. Anti-Spoofing: Strip any client-supplied identity headers before processing
+        ServerHttpRequest cleanRequest = request.mutate()
+                .headers(httpHeaders -> {
+                    httpHeaders.remove("X-User-Id");
+                    httpHeaders.remove("X-User-Role");
+                    httpHeaders.remove("X-User-Email");
+                })
+                .build();
+        ServerWebExchange cleanExchange = exchange.mutate().request(cleanRequest).build();
+
+        String path = cleanRequest.getURI().getPath();
+        HttpMethod method = cleanRequest.getMethod();
 
         // Public read-only endpoints (anyone can browse hostels, rooms, beds, amenities)
         boolean isPublicRead = method == HttpMethod.GET && (
                 path.startsWith("/api/v1/hostels") ||
-                path.startsWith("/api/v1/rooms") ||
-                path.startsWith("/api/v1/beds") ||
-                path.startsWith("/api/v1/amenities")
+                        path.startsWith("/api/v1/rooms") ||
+                        path.startsWith("/api/v1/beds") ||
+                        path.startsWith("/api/v1/amenities")
         );
 
         boolean isWhitelisted = OPEN_API_ENDPOINTS.stream().anyMatch(path::startsWith) || isPublicRead;
 
-        // If endpoint is secured, strict JWT authentication is mandatory
+        // 3. Protected Endpoints: Strict JWT validation is required
         if (!isWhitelisted) {
-            if (!request.getHeaders().containsHeader(HttpHeaders.AUTHORIZATION)) {
-                return this.onError(exchange, HttpStatus.UNAUTHORIZED);
+            if (!cleanRequest.getHeaders().containsHeader(HttpHeaders.AUTHORIZATION)) {
+                return this.onError(cleanExchange, HttpStatus.UNAUTHORIZED);
             }
 
-            String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+            String authHeader = cleanRequest.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return this.onError(exchange, HttpStatus.UNAUTHORIZED);
+                return this.onError(cleanExchange, HttpStatus.UNAUTHORIZED);
             }
 
             String token = authHeader.substring(7);
             if (!jwtUtil.isTokenValid(token)) {
-                return this.onError(exchange, HttpStatus.UNAUTHORIZED);
+                return this.onError(cleanExchange, HttpStatus.UNAUTHORIZED);
             }
 
             Long userId = jwtUtil.extractUserId(token);
             String role = jwtUtil.extractRole(token);
 
-            ServerHttpRequest mutatedRequest = request.mutate()
+            // Inject VERIFIED headers derived from cryptographic JWT
+            ServerHttpRequest authenticatedRequest = cleanRequest.mutate()
                     .header("X-User-Id", String.valueOf(userId))
                     .header("X-User-Role", role != null ? role : "")
                     .build();
 
-            return chain.filter(exchange.mutate().request(mutatedRequest).build());
+            return chain.filter(cleanExchange.mutate().request(authenticatedRequest).build());
         }
 
-        // If whitelisted, check if an optional valid token is present to propagate user identity
-        if (request.getHeaders().containsHeader(HttpHeaders.AUTHORIZATION)) {
-            String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        // 4. Whitelisted Endpoints: If an optional valid token is provided, attach identity
+        if (cleanRequest.getHeaders().containsHeader(HttpHeaders.AUTHORIZATION)) {
+            String authHeader = cleanRequest.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
                 if (jwtUtil.isTokenValid(token)) {
                     Long userId = jwtUtil.extractUserId(token);
                     String role = jwtUtil.extractRole(token);
 
-                    ServerHttpRequest mutatedRequest = request.mutate()
+                    ServerHttpRequest authenticatedRequest = cleanRequest.mutate()
                             .header("X-User-Id", String.valueOf(userId))
                             .header("X-User-Role", role != null ? role : "")
                             .build();
 
-                    return chain.filter(exchange.mutate().request(mutatedRequest).build());
+                    return chain.filter(cleanExchange.mutate().request(authenticatedRequest).build());
                 }
             }
         }
 
-        return chain.filter(exchange);
+        // Forward sanitized request with zero spoofed headers
+        return chain.filter(cleanExchange);
     }
 
     private Mono<Void> onError(ServerWebExchange exchange, HttpStatus httpStatus) {

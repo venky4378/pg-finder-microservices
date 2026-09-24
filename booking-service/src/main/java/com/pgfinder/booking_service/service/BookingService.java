@@ -17,9 +17,8 @@ public interface BookingService {
 
      void deleteBooking(Long id);
 
-     BookingResponseDto confirmBooking(Long id);
-
-     BookingResponseDto cancelBooking(Long id);
-
-     BookingResponseDto completeBooking(Long id);
+     // Pass requester identity for ownership validation
+     BookingResponseDto confirmBooking(Long id, Long userId, String role);
+     BookingResponseDto cancelBooking(Long id, Long userId, String role);
+     BookingResponseDto completeBooking(Long id, Long userId, String role);
 }
